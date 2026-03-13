@@ -1,0 +1,17 @@
+{
+  "initial_capital": 50.0,
+  "final_capital": 54.08,
+  "total_profit": -6.0,
+  "growth_pct": 8.2,
+  "trades": 68,
+  "wins": 42,
+  "losses": 26,
+  "win_rate": 61.8,
+  "profit_factor": 0.81,
+  "prof_days": 17,
+  "total_days": 90,
+  "daily_win_rate": 18.9,
+  "avg_weekly": 0.31,
+  "best_day": 1.68,
+  "worst_day": -2.4
+}

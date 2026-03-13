@@ -1,0 +1,22 @@
+{
+  "initial_capital": 50.0,
+  "final_capital": 1853.0,
+  "total_profit": 1803.0,
+  "growth_percent": 3606.0,
+  "total_trades": 340,
+  "winning_trades": 334,
+  "losing_trades": 6,
+  "win_rate": 98.2,
+  "profit_factor": Infinity,
+  "gross_profit": 1803.0,
+  "gross_loss": 0.0,
+  "profitable_days": 78,
+  "total_days": 90,
+  "daily_win_rate": 86.7,
+  "avg_weekly_return": 156.88,
+  "best_day": 71.6,
+  "worst_day": 0,
+  "lot_size": 0.05,
+  "tp_pips": 10,
+  "sl_pips": 12
+}

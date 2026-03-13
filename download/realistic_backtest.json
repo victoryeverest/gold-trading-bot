@@ -1,0 +1,16 @@
+{
+  "initial_capital": 50.0,
+  "final_capital": -1.2,
+  "total_profit": -51.2,
+  "growth_percent": -102.4,
+  "total_trades": 66,
+  "winning_trades": 34,
+  "losing_trades": 32,
+  "win_rate": 51.5,
+  "profit_factor": 0.73,
+  "profitable_days": 11,
+  "total_days": 90,
+  "lot_size": 0.01,
+  "tp_pips": 8,
+  "sl_pips": 12
+}

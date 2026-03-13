@@ -1,0 +1,13 @@
+{
+  "initial_capital": 50.0,
+  "final_capital": 1415039.5176249521,
+  "total_profit": -746387.2871999945,
+  "growth_percent": 2829979.0352499043,
+  "total_trades": 475,
+  "winning_trades": 263,
+  "losing_trades": 212,
+  "win_rate": 55.368421052631575,
+  "profit_factor": 0.2287356585942373,
+  "daily_win_rate": 74.44444444444444,
+  "avg_weekly_return": 108845.34750961166
+}
