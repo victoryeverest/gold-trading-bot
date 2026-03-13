@@ -1,5 +1,5 @@
 """
-Enterprise Gold Trading Bot Configuration
+ Gold Trading Bot Configuration
 Optimized for Small Capital ($50) with Aggressive Daily Profits
 """
 
