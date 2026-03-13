@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PROFITABLE Scalable Gold Trading Bot
+PROFITABLE Scalable Gold Trading Backtest
 Optimized for consistent profits across all account sizes ($50 to $2M+).
 Achieves 64%+ Win Rate with Profit Factor > 2.0
 """

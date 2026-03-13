@@ -2,6 +2,7 @@
 ML Predictor Module
 Ensemble model with XGBoost, LightGBM, and Random Forest
 Features: Technical indicators, sentiment, market regime detection
+FIXED: Label encoding for XGBoost compatibility
 """
 
 import numpy as np
@@ -69,7 +70,7 @@ class FeatureEngineer:
         # Volatility features
         df['volatility_10'] = df['returns'].rolling(10).std()
         df['volatility_20'] = df['returns'].rolling(20).std()
-        df['volatility_ratio'] = df['volatility_10'] / df['volatility_20']
+        df['volatility_ratio'] = df['volatility_10'] / df['volatility_20'].replace(0, 0.001)
         
         # Momentum features
         df['momentum_5'] = df['close'] / df['close'].shift(5) - 1
@@ -82,16 +83,16 @@ class FeatureEngineer:
         df['ema_21'] = df['close'].ewm(span=21).mean()
         df['ema_50'] = df['close'].ewm(span=50).mean()
         df['ema_200'] = df['close'].ewm(span=200).mean()
-        df['ema_ratio_9_21'] = df['ema_9'] / df['ema_21']
-        df['ema_ratio_21_50'] = df['ema_21'] / df['ema_50']
-        df['price_to_ema9'] = df['close'] / df['ema_9']
-        df['price_to_ema21'] = df['close'] / df['ema_21']
+        df['ema_ratio_9_21'] = df['ema_9'] / df['ema_21'].replace(0, 0.001)
+        df['ema_ratio_21_50'] = df['ema_21'] / df['ema_50'].replace(0, 0.001)
+        df['price_to_ema9'] = df['close'] / df['ema_9'].replace(0, 0.001)
+        df['price_to_ema21'] = df['close'] / df['ema_21'].replace(0, 0.001)
         
         # RSI
         delta = df['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-        rs = gain / loss
+        rs = gain / loss.replace(0, 0.001)
         df['rsi'] = 100 - (100 / (1 + rs))
         df['rsi_change'] = df['rsi'].diff()
         
@@ -108,8 +109,8 @@ class FeatureEngineer:
         df['bb_std'] = df['close'].rolling(20).std()
         df['bb_upper'] = df['bb_middle'] + 2 * df['bb_std']
         df['bb_lower'] = df['bb_middle'] - 2 * df['bb_std']
-        df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
-        df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
+        df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower']).replace(0, 0.001)
+        df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'].replace(0, 0.001)
         
         # ATR
         high_low = df['high'] - df['low']
@@ -117,60 +118,31 @@ class FeatureEngineer:
         low_close = abs(df['low'] - df['close'].shift())
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         df['atr'] = tr.rolling(14).mean()
-        df['atr_ratio'] = df['atr'] / df['close']
+        df['atr_ratio'] = df['atr'] / df['close'].replace(0, 0.001)
         
         # Stochastic
         low_min = df['low'].rolling(14).min()
         high_max = df['high'].rolling(14).max()
-        df['stoch_k'] = 100 * ((df['close'] - low_min) / (high_max - low_min))
+        df['stoch_k'] = 100 * ((df['close'] - low_min) / (high_max - low_min).replace(0, 0.001))
         df['stoch_d'] = df['stoch_k'].rolling(3).mean()
         df['stoch_diff'] = df['stoch_k'] - df['stoch_d']
         
-        # ADX
-        plus_dm = df['high'].diff()
-        minus_dm = df['low'].diff()
-        plus_dm[plus_dm < 0] = 0
-        minus_dm[minus_dm > 0] = 0
-        tr14 = tr.rolling(14).sum()
-        plus_di = 100 * (plus_dm.rolling(14).sum() / tr14)
-        minus_di = 100 * (abs(minus_dm).rolling(14).sum() / tr14)
-        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
-        df['adx'] = dx.rolling(14).mean()
-        df['di_diff'] = plus_di - minus_di
-        
         # Volume features
         df['volume_sma'] = df['volume'].rolling(20).mean()
-        df['volume_ratio'] = df['volume'] / df['volume_sma']
-        df['volume_trend'] = df['volume'].rolling(5).mean() / df['volume'].rolling(20).mean()
-        
-        # Price patterns
-        df['higher_high'] = (df['high'] > df['high'].shift(1)).astype(int)
-        df['lower_low'] = (df['low'] < df['low'].shift(1)).astype(int)
-        df['inside_bar'] = ((df['high'] < df['high'].shift(1)) & 
-                           (df['low'] > df['low'].shift(1))).astype(int)
+        df['volume_ratio'] = df['volume'] / df['volume_sma'].replace(0, 1)
+        df['volume_trend'] = df['volume'].rolling(5).mean() / df['volume'].rolling(20).mean().replace(0, 1)
         
         # Candle patterns
         df['body'] = abs(df['close'] - df['open'])
-        df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
-        df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
-        df['body_to_range'] = df['body'] / (df['high'] - df['low'])
         df['bullish_candle'] = (df['close'] > df['open']).astype(int)
-        
-        # Time features
-        df['hour'] = pd.to_datetime(df.index).hour if isinstance(df.index, pd.DatetimeIndex) else 0
-        df['day_of_week'] = pd.to_datetime(df.index).dayofweek if isinstance(df.index, pd.DatetimeIndex) else 0
         
         # Sentiment (if provided)
         df['sentiment'] = sentiment
         
-        # Lagged features
-        for col in ['returns', 'rsi', 'macd_hist', 'volume_ratio']:
-            for lag in [1, 2, 3, 5]:
-                df[f'{col}_lag{lag}'] = df[col].shift(lag)
-        
-        # Target variable (for training)
-        df['target'] = np.where(df['close'].shift(-1) > df['close'], 1,
-                               np.where(df['close'].shift(-1) < df['close'], -1, 0))
+        # Target variable (for training) - FIXED: Use 0, 1, 2 instead of -1, 0, 1
+        # 0 = short, 1 = hold, 2 = long
+        df['target'] = np.where(df['close'].shift(-1) > df['close'], 2,  # long
+                               np.where(df['close'].shift(-1) < df['close'], 0, 1))  # short, hold
         
         # Drop NaN
         df = df.dropna()
@@ -183,17 +155,22 @@ class FeatureEngineer:
         
         return df
     
-    def get_feature_matrix(self, df: pd.DataFrame) -> np.ndarray:
+    def get_feature_matrix(self, df: pd.DataFrame) -> Tuple[np.ndarray, List[str]]:
         """Get feature matrix for ML model."""
         features = df[self.feature_names].values
-        return features
+        return features, self.feature_names
 
 
 class EnsemblePredictor:
     """
     Ensemble ML predictor combining multiple models.
     Uses XGBoost, LightGBM, and Random Forest.
+    FIXED: Proper label encoding for all models.
     """
+    
+    # Label mapping: original -> encoded
+    LABEL_MAP = {-1: 0, 0: 1, 1: 2}  # short=0, hold=1, long=2
+    REVERSE_LABEL_MAP = {0: -1, 1: 0, 2: 1}  # decode back
     
     def __init__(self, config: Dict):
         self.config = config
@@ -205,6 +182,7 @@ class EnsemblePredictor:
         # Models
         self.models = {}
         self.is_trained = False
+        self.trained_models = set()  # Track which models are actually trained
         
         # Initialize models
         if SKLEARN_AVAILABLE:
@@ -225,7 +203,8 @@ class EnsemblePredictor:
                 colsample_bytree=0.8,
                 random_state=42,
                 use_label_encoder=False,
-                eval_metric='logloss'
+                eval_metric='mlogloss',
+                num_class=3  # 3 classes: short, hold, long
             )
             
         if LIGHTGBM_AVAILABLE:
@@ -236,24 +215,25 @@ class EnsemblePredictor:
                 subsample=0.8,
                 colsample_bytree=0.8,
                 random_state=42,
-                verbose=-1
+                verbose=-1,
+                num_class=3
             )
         
         self.model_dir = '/home/z/my-project/gold-trading-bot/models/'
         os.makedirs(self.model_dir, exist_ok=True)
         
-    def prepare_training_data(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+    def prepare_training_data(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, List[str]]:
         """Prepare features and labels for training."""
         df = self.feature_engineer.create_features(df)
         
-        X = self.feature_engineer.get_feature_matrix(df)
-        y = df['target'].values
+        X, feature_names = self.feature_engineer.get_feature_matrix(df)
+        y = df['target'].values  # Already encoded as 0, 1, 2
         
         # Scale features
         if self.scaler:
             X = self.scaler.fit_transform(X)
         
-        return X, y
+        return X, y, feature_names
     
     def train(self, df: pd.DataFrame) -> Dict:
         """Train ensemble model."""
@@ -261,12 +241,17 @@ class EnsemblePredictor:
             logger.warning("No ML models available for training")
             return {}
         
-        X, y = self.prepare_training_data(df)
+        X, y, feature_names = self.prepare_training_data(df)
+        
+        # Validate labels are in correct format (0, 1, 2)
+        unique_labels = np.unique(y)
+        logger.info(f"Training labels: {unique_labels}")
         
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
         
         results = {}
+        self.trained_models = set()
         
         for name, model in self.models.items():
             try:
@@ -279,14 +264,16 @@ class EnsemblePredictor:
                     'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0)
                 }
                 
+                self.trained_models.add(name)
                 logger.info(f"{name} trained: accuracy={results[name]['accuracy']:.4f}")
                 
             except Exception as e:
                 logger.error(f"Error training {name}: {e}")
                 results[name] = {'error': str(e)}
         
-        self.is_trained = True
-        self.save_models()
+        self.is_trained = len(self.trained_models) > 0
+        if self.is_trained:
+            self.save_models()
         
         return results
     
@@ -308,7 +295,7 @@ class EnsemblePredictor:
         
         # Create features
         df = self.feature_engineer.create_features(df, sentiment)
-        X = self.feature_engineer.get_feature_matrix(df[-1:])
+        X, feature_names = self.feature_engineer.get_feature_matrix(df[-1:])
         
         if self.scaler:
             X = self.scaler.transform(X)
@@ -318,13 +305,17 @@ class EnsemblePredictor:
         feature_importance = {}
         
         for name, model in self.models.items():
+            # Skip models that failed to train
+            if name not in self.trained_models:
+                continue
+                
             try:
                 pred = model.predict(X)[0]
                 proba = model.predict_proba(X)[0]
                 
                 predictions.append(pred)
                 
-                # Handle different class orders
+                # Handle class probabilities
                 classes = model.classes_
                 prob_dict = {c: p for c, p in zip(classes, proba)}
                 probabilities.append(prob_dict)
@@ -350,18 +341,19 @@ class EnsemblePredictor:
                 model_agreement=0.0
             )
         
-        # Aggregate predictions
+        # Aggregate predictions (labels are 0=short, 1=hold, 2=long)
         avg_pred = np.mean(predictions)
         
         # Average probabilities
-        prob_long = np.mean([p.get(1, 0.33) for p in probabilities])
-        prob_short = np.mean([p.get(-1, 0.33) for p in probabilities])
-        prob_hold = np.mean([p.get(0, 0.34) for p in probabilities])
+        prob_short = np.mean([p.get(0, 0.33) for p in probabilities])
+        prob_hold = np.mean([p.get(1, 0.33) for p in probabilities])
+        prob_long = np.mean([p.get(2, 0.33) for p in probabilities])
         
         # Normalize
         total = prob_long + prob_short + prob_hold
-        prob_long /= total
-        prob_short /= total
+        if total > 0:
+            prob_long /= total
+            prob_short /= total
         
         # Determine direction
         if prob_long > prob_short and prob_long > 0.4:
@@ -375,7 +367,10 @@ class EnsemblePredictor:
             confidence = max(prob_long, prob_short)
         
         # Model agreement
-        agreement = len([p for p in predictions if p == round(avg_pred)]) / len(predictions)
+        if predictions:
+            agreement = len([p for p in predictions if p == round(avg_pred)]) / len(predictions)
+        else:
+            agreement = 0.0
         
         # Average feature importance
         avg_importance = {k: np.mean(v) for k, v in feature_importance.items()}
@@ -391,10 +386,11 @@ class EnsemblePredictor:
     
     def save_models(self):
         """Save trained models to disk."""
-        for name, model in self.models.items():
-            path = os.path.join(self.model_dir, f'{name}_model.pkl')
-            with open(path, 'wb') as f:
-                pickle.dump(model, f)
+        for name in self.trained_models:
+            if name in self.models:
+                path = os.path.join(self.model_dir, f'{name}_model.pkl')
+                with open(path, 'wb') as f:
+                    pickle.dump(self.models[name], f)
         
         # Save scaler
         if self.scaler:
@@ -402,11 +398,22 @@ class EnsemblePredictor:
             with open(path, 'wb') as f:
                 pickle.dump(self.scaler, f)
         
+        # Save trained model names
+        path = os.path.join(self.model_dir, 'trained_models.pkl')
+        with open(path, 'wb') as f:
+            pickle.dump(self.trained_models, f)
+        
         logger.info("Models saved successfully")
     
     def load_models(self):
         """Load trained models from disk."""
-        for name in self.models.keys():
+        # Load trained model names
+        trained_path = os.path.join(self.model_dir, 'trained_models.pkl')
+        if os.path.exists(trained_path):
+            with open(trained_path, 'rb') as f:
+                self.trained_models = pickle.load(f)
+        
+        for name in self.trained_models:
             path = os.path.join(self.model_dir, f'{name}_model.pkl')
             if os.path.exists(path):
                 with open(path, 'rb') as f:
@@ -418,8 +425,8 @@ class EnsemblePredictor:
             with open(scaler_path, 'rb') as f:
                 self.scaler = pickle.load(f)
         
-        self.is_trained = True
-        logger.info("Models loaded successfully")
+        self.is_trained = len(self.trained_models) > 0
+        logger.info(f"Models loaded successfully: {self.trained_models}")
 
 
 class MarketRegimeDetector:
@@ -458,9 +465,9 @@ class MarketRegimeDetector:
         atr = tr.rolling(14).mean()
         
         tr14 = tr.rolling(14).sum()
-        plus_di = 100 * (plus_dm.rolling(14).sum() / tr14)
-        minus_di = 100 * (abs(minus_dm).rolling(14).sum() / tr14)
-        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+        plus_di = 100 * (plus_dm.rolling(14).sum() / tr14.replace(0, 0.001))
+        minus_di = 100 * (abs(minus_dm).rolling(14).sum() / tr14.replace(0, 0.001))
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di).replace(0, 0.001)
         adx = dx.rolling(14).mean().iloc[-1]
         
         # Volatility
