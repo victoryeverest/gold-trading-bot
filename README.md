@@ -88,8 +88,15 @@ MT5_PASSWORD=your_password
 MT5_SERVER=Exness-Real
 
 # News API (optional)
-NEWS_API_KEY=your_api_key
+NEWS_API_KEY=your_key_here
+FINNHUB_API_KEY=your_key_here
 ```
+## Get free API keys:
+API
+Get Key From
+NewsAPI	https://newsapi.org/register
+Finnhub	https://finnhub.io/register
+Alpha Vantage	https://www.alphavantage.co/support/#api-key
 
 ## 🏃 Running
 
@@ -133,6 +140,7 @@ gold-trading-bot/
 ├── ml/
 │   └── predictor.py             # ML ensemble models
 ├── news/
+    └── fetcher.py               # Multi-source news fetcher
 │   └── sentiment.py             # News analysis
 ├── broker/
 │   └── exness.py                # Exness/MT5 integration
