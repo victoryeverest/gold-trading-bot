@@ -1,4 +1,4 @@
-# 🥇 Enterprise Gold Trading Bot
+# Gold Trading Bot
 
 **Professional-grade automated trading system for gold (XAUUSD) with aggressive profit optimization for small capital accounts.**
 

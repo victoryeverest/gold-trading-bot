@@ -16,7 +16,7 @@ from trading.engine import TradingEngine, Backtester
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Enterprise Gold Trading Bot')
+    parser = argparse.ArgumentParser(description='Gold Trading Bot')
     parser.add_argument('command', choices=['run', 'backtest', 'train', 'test'],
                        help='Command to execute')
     parser.add_argument('--capital', type=float, default=50.0,
