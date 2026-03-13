@@ -1,6 +1,7 @@
 """
 News Sentiment Analyzer
 Analyzes financial news for gold trading signals
+Integrates with NewsAPI, Finnhub, Alpha Vantage
 """
 
 import re
@@ -9,48 +10,78 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import asyncio
+import numpy as np
 
 logger = logging.getLogger('trading')
 
+# Import news fetcher
+try:
+    from news.fetcher import NewsAggregator, NewsArticle
+    FETCHER_AVAILABLE = True
+except ImportError:
+    FETCHER_AVAILABLE = False
+    logger.warning("News fetcher not available")
+
+
 # Gold-specific keywords with sentiment weights
 GOLD_KEYWORDS = {
-    # Strong positive
+    # Strong positive for gold
     'gold rally': 0.8,
     'gold surges': 0.8,
+    'gold prices rise': 0.7,
     'safe haven demand': 0.7,
     'inflation hedge': 0.6,
-    'central bank buying': 0.7,
+    'central bank buying gold': 0.7,
     'geopolitical tension': 0.5,
     'us dollar weak': 0.6,
+    'dollar weakness': 0.6,
     'fed rate cut': 0.7,
+    'rate cuts expected': 0.6,
     'monetary easing': 0.6,
     'economic uncertainty': 0.5,
+    'recession fears': 0.5,
+    'investors seek safety': 0.5,
+    'gold demand rises': 0.6,
+    'bullish gold': 0.5,
     
-    # Strong negative
+    # Strong negative for gold
     'gold falls': -0.8,
     'gold drops': -0.8,
+    'gold prices fall': -0.7,
     'risk appetite': -0.4,
+    'risk-on sentiment': -0.4,
     'us dollar strong': -0.6,
+    'dollar strength': -0.6,
     'fed rate hike': -0.7,
+    'rate hike expected': -0.6,
     'tightening monetary': -0.6,
     'economic recovery': -0.4,
+    'strong economy': -0.3,
     'stock market rally': -0.3,
     'bond yields rise': -0.5,
+    'yields climb': -0.4,
+    'bearish gold': -0.5,
+    'gold selloff': -0.7,
     
-    # Moderate keywords
+    # Neutral/moderate keywords
     'xauusd': 0.0,
     'precious metals': 0.0,
     'comex': 0.0,
     'bullion': 0.0,
     'etf inflow': 0.4,
     'etf outflow': -0.4,
+    'gold trading': 0.0,
+    'gold futures': 0.0,
 }
 
+# High impact events that can cause volatility
 HIGH_IMPACT_EVENTS = [
     'fomc', 'federal reserve', 'interest rate decision',
     'non-farm payrolls', 'nfp', 'cpi', 'inflation data',
     'gdp', 'retail sales', 'pmi', 'employment report',
-    'fed chair speech', 'powell', 'ecb', 'bank of japan'
+    'fed chair speech', 'powell', 'ecb', 'bank of japan',
+    'adp employment', 'ism', 'consumer confidence',
+    'durable goods', 'trade balance', 'ppi'
 ]
 
 
@@ -67,8 +98,9 @@ class NewsItem:
 
 class SentimentAnalyzer:
     """
-    Analyze news sentiment for trading signals.
+    Analyzes news sentiment for trading signals.
     Uses keyword-based analysis with impact weighting.
+    Can fetch real-time news from multiple APIs.
     """
     
     def __init__(self, config: Dict):
@@ -77,11 +109,38 @@ class SentimentAnalyzer:
         self.news_cache: List[NewsItem] = []
         self.last_sentiment = 0.0
         
+        # Initialize news fetcher
+        self.fetcher = None
+        if FETCHER_AVAILABLE and self.news_config.get('NEWS_ENABLED', True):
+            self.fetcher = NewsAggregator(config)
+            logger.info("News aggregator initialized")
+        
+    async def fetch_latest_news(self) -> List[Dict]:
+        """Fetch latest news from configured sources."""
+        if self.fetcher:
+            try:
+                articles = await self.fetcher.fetch_all_news(hours=24)
+                return [
+                    {
+                        'title': a.title,
+                        'summary': a.description,
+                        'source': a.source,
+                        'timestamp': a.published_at
+                    }
+                    for a in articles
+                ]
+            except Exception as e:
+                logger.error(f"Error fetching news: {e}")
+        return []
+        
     def analyze_text(self, text: str) -> Tuple[float, Dict]:
         """
         Analyze sentiment of text.
         Returns: (sentiment_score, keyword_matches)
         """
+        if not text:
+            return 0.0, {}
+            
         text_lower = text.lower()
         total_sentiment = 0.0
         matches = {}
@@ -95,7 +154,6 @@ class SentimentAnalyzer:
         
         # Normalize to [-1, 1]
         if matches:
-            total_words = len(text.split())
             max_possible = len(matches) * 2  # Max weight is ~1.0
             normalized = np.clip(total_sentiment / max_possible, -1, 1)
         else:
@@ -188,7 +246,8 @@ class SentimentAnalyzer:
         """Get reliability weight for news source."""
         high_reliability = [
             'reuters', 'bloomberg', 'financial times', 'wsj', 'cnbc',
-            'marketwatch', 'investing.com', 'fxstreet'
+            'marketwatch', 'investing.com', 'fxstreet', 'associated press',
+            'the wall street journal', 'financial times', 'bbc'
         ]
         source_lower = source.lower()
         
@@ -241,6 +300,11 @@ class SentimentAnalyzer:
                     return True, f'High impact news: {item.title}'
         
         return False, ''
+    
+    def get_recent_headlines(self, count: int = 5) -> List[str]:
+        """Get recent news headlines for display."""
+        recent = sorted(self.news_cache, key=lambda x: x.timestamp, reverse=True)
+        return [f"[{item.impact}] {item.title}" for item in recent[:count]]
 
 
 class EconomicCalendar:
@@ -286,5 +350,9 @@ class EconomicCalendar:
         return 'NONE'
 
 
-# Import numpy for normalization
-import numpy as np
+# Convenience function
+async def get_current_sentiment(config: Dict) -> float:
+    """Get current gold market sentiment."""
+    analyzer = SentimentAnalyzer(config)
+    news = await analyzer.fetch_latest_news()
+    return analyzer.analyze_news(news)
